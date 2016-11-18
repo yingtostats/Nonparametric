@@ -1,0 +1,222 @@
+---
+title: "非参第四次作业"
+author: "张颖 2013202023"
+date: "October 19, 2016"
+output: html_document
+---
+```{r,echo = FALSE}
+#hw3 2013202023 ying zhang
+library("car")
+library("readxl")
+```
+
+##实验二程序（改进版）
+
+基于课本82页实验二程序的改进，共有以下几点：
+
+* 如果给定了实验中$n$与$n_{0}$即可获得$n_{1}$，没必要多余输入$n_{1}$
+* 原程序中$a = \{1,2,3,...,n\}$然后做了n次循环，每次算出随机游程$r = a_{i}$的概率。实际上，如果给定了 $\min (n_{0},n_{1})$，那么所可能产生的随机游程最多为$2*\min (n_{0},n_{1}) + 1$(除了$n_1 = n_0$情况)，因此只需要令$a = \{1,2,3,...,(2*\min (n_{0},n_{1}) + 1)\}$，在固定$n$后，$n_{1}$,$n_{2}$大小相差越多，循环的次数越少，减少了不必要的循环。
+* 原程序求游程个数累计概率是用循环语句计算，我们可以简化成cumsum()函数即可算出累计概率。
+* barplot中的数据应该写成res[,2]
+
+```{r}
+pruns <- function(n,n0)  {
+    b <- NULL
+    n1 <- n - n0
+    #set the possible num of a
+    a <- 1:(2*min(n0,n1) + 2)
+    #the prob. b
+    for (i in 1:length(a)) {
+        k = floor(a[i]/2)
+        if(a[i] %% 2 == 0)  {
+            b[i] <- 2 * choose((n1 - 1),(k - 1)) * choose((n0 - 1),(k -1))/choose(n,n1)
+        }else
+            b[i] <- (choose((n1 - 1),(k - 1)) * choose((n0 - 1),k) + choose((n0 - 1),(k - 1)) * choose((n1 - 1),k))/choose(n,n1)
+    }
+    #the cumuprob. c
+    c <- cumsum(b)
+    #result
+    result = as.data.frame(cbind(a,b,c)) 
+    colnames(result) <- c("k","prob","cumuprob")
+    return(result)
+}
+
+res <- pruns(10,4)
+res
+```
+```{r,echo=FALSE}
+barplot(res[,2],border = F, col = "gray",names.arg = res[,1]) #res[,2];names.arg;
+(m.value <- sum(res$k * res$prob)) #mean
+(v.value <- sum((res$k - m.value)^2 * res$prob)) #variance
+```
+
+
+##习题2.5
+
+```{r}
+r <- 37
+n <- 76
+n0 <- 42
+signal <- pruns(n,n0)
+barplot(signal[,2],border = F, col = "gray",names.arg = signal[,1]) 
+```
+
+```{r,eval=FALSE}
+cat("The mean of r is ",signal.mean <- sum(signal$k * signal$prob)) #mean
+cat("The variance of r is",sum((signal$k - signal.mean)^2 * signal$prob)) #variance
+#left-tailed test
+cat("The left-tailed test p-value is",signal[r,3])
+#two-sided test
+cat("The two-sided test p-value is",2*signal[r,3])
+```
+
+```{r,echo=FALSE}
+cat("The mean of r is ",signal.mean <- sum(signal$k * signal$prob)) #mean
+cat("The variance of r is",sum((signal$k - signal.mean)^2 * signal$prob)) #variance
+#left-tailed test
+cat("The left-tailed test p-value is",signal[r,3])
+#two-sided test
+cat("The two-sided test p-value is",2*signal[r,3])
+```
+
+* 可以看出无论是单边检验（左侧检验）还是双边检验，p值都远远大于0.05，所以我们不拒绝原假设：该信号是纯粹随机干扰。
+
+##改进后的t检验
+![Workflow](C:\\Users\\user\\Desktop\\Non-parametric\\fig1.png)
+$$\text{Workflow of Revised t-test}$$
+
+* 我们先需要检验数据的正态分布的正确性，可以用qq-plot或者是shapiro-wilk test等方法来检验，如果数据符合正态分布这个原假设在某种置信水平内成立，那么我们可以直接使用t检验来检验平均数。
+
+* 如果数据的正态分布的假设不可靠的话，比如数据是偏态函数，数据不对称等情况，这时直接使用t检验的效果会大打折扣（比如书上楼价的例子），此时我们需要对数据做变换，使得变换后的数据变得更加对称，其中使用到了Box-Cox变换。
+
+* Box-Cox变换是指
+
+$$f(x,\lambda)= \begin{cases}
+                \frac{x^{\lambda} − 1}{\lambda} \quad \text{if} \quad \lambda \neq 0\\
+                log(x) \quad \text{if} \quad \lambda=0
+                \end{cases}$$
+                
+其中$\lambda$的选定是指使得其似然函数最大时的$\lambda$,可以使用多次迭代计算出最大值点。Box-Cox变换可以使得明显偏态的原始数据变得更加对称,使得其进行t检验更加有效。在这里使用书本上房价的例子进行比较Box-Cox转换的功效。
+                
+```{r}
+dat <- c(36,32,31,25,28,36,40,32,41,26,35,35,32,87,33,35)
+shapiro.test(dat)
+```
+
+* shapiro wilk test $H_{0}: data \sim Normal distribution$, but p-value = 8.388e-06 < 0.01, so under 99% confidence level we can reject the null hypothesis that data is from normal distribution.
+
+* 做Box-Cox转换之寻找$\lambda$ (boxCox函数)
+```{r}
+boxCox(dat~1,seq(-10,5, 0.01))
+```
+
+* 此时我们可以看到$\lambda$在-2附近时似然函数达到最大。求得最大值点$\lambda = -2.008502$
+
+```{r}
+lambda <- powerTransform(dat)$lambda
+dat.trans <- bcPower(dat,lambda)
+par(mfrow = c(1,2))
+hist(dat)
+hist(dat.trans)
+```
+
+* 转换前与转换后的数据分布从直方图来看明显转换后更加对称了。
+
+```{r,eval=FALSE}
+mean <- 37
+mean.trans <- bcPower(mean,lambda)
+cat("The p-value of original data t-test",t.test(dat - mean)[[3]])
+cat("The p-value of transformed data t-test",t.test(dat.trans-mean.trans)[[3]])
+```
+
+```{r,echo=FALSE}
+mean <- 37
+mean.trans <- bcPower(mean,lambda)
+cat("The p-value of original data t-test",t.test(dat - mean)[[3]])
+cat("The p-value of transformed data t-test",t.test(dat.trans-mean.trans)[[3]])
+```
+
+* 我们可以看到，转换前和转换后的数据直方图分布，转换后数据变得更加对称，而非初始的右偏状态。
+* 在转换前p值等于0.8896是基本不可能被拒绝的，转换后p值变成了0.05426，从而平均值37这个原假设在置信度$\alpha = 0.1$的时候是可以拒绝的。
+* 这种修改后的t检验适用范围更广，避免了一开始正态假定就不成立的数据进行t检验导致结果存在严重偏差。
+
+## 补充题
+
+```{r}
+##signtest
+quality <- read_excel("C:\\Users\\user\\Desktop\\Non-parametric\\quality.xlsx", col_names = TRUE)
+quality <- as.matrix(quality[,2:3])
+colnames(quality) <- c("AQI","PM2.5") 
+p = 3/4
+AQI.test = 100
+PM25.test = 40.4
+```
+
+
+### AQI的75%分位数及中位数检验
+
+* 我们看到AQI样本的75%分位数是109 > 100, 所以我们假设检验（右侧单边检验）有 
+$$H_{0}: M_{0.75} \leq 100 $$ $$H_{1}: M_{0.75} > 100 $$ 
+
+```{r}
+quantile(quality[,1])
+#right-sided test M_3/4 <= 100
+AQI.sign <- sign(quality[,1] - AQI.test)
+aqi.n <- sum(AQI.sign != 0)
+aqi.neg <- sum(AQI.sign<0) # H_0: S.neg ~ bin(n,p)
+cat("The AQI's data 75% sign-test's p-value is", pbinom(aqi.neg,aqi.n,p))
+#do not reject H_{0}
+```
+
+$p = 0.1193 > \alpha = 0.1$ 所以我们不拒绝原假设$H_{0}: M_{0.75} \leq 100$，表明在90%置信水平下AQI数据的真实75%分位数是小于等于100的。
+
+
+* AQI样本的中位数检验，做我们假设检验（双边）有 
+$$H_{0}: M_{0.5} = 100 $$ $$H_{1}: M_{0.5} \neq 100 $$ 
+
+```{r}
+#two-sided test M_1/2 = 100
+aqi.test <- min(aqi.n - aqi.neg, aqi.neg)
+cat("The AQI's data 50% sign-test's p-value is", 2*pbinom(aqi.test,aqi.n,0.5))
+#do not reject H_{0}
+```
+
+$p = 0.1214 > \alpha = 0.1$ 所以我们不拒绝原假设$H_{0}: M_{0.5} = 100$，表明在90%置信水平下可以接受AQI数据的真实中位数是100。
+
+
+###PM2.5的75%分位数及中位数检验
+
+* 我们看到PM2.5样本的75%分位数是80 > 40.4, 所以我们假设检验（右侧单边检验）有 
+$$H_{0}: M_{0.75} \leq 40.4 $$ $$H_{1}: M_{0.75} > 40.4 $$ 
+
+```{r}
+quantile(quality[,2]) 
+#right-sided test M_3/4 <= 40.4
+PM25.sign <- sign(quality[,2] - PM25.test)
+pm25.n <- sum(PM25.sign != 0)
+pm25.neg <- sum(PM25.sign<0)
+cat("The PM2.5's 75% data sign-test's p-value is", pbinom(pm25.neg,pm25.n,p))
+#reject the H_{0}
+```
+
+$p = 0.00044 < \alpha = 0.1$ 所以我们拒绝原假设$H_{0}: M_{0.75} \leq 40.4$，表明在90%置信水平下PM2.5数据的真实75%分位数是比40.4大的。
+
+* PM2.5样本的中位数检验，做我们假设检验（双边）有 
+$$H_{0}: M_{0.5} = 40.4 $$ $$H_{1}: M_{0.5} \neq 40.4 $$
+
+```{r}
+#two-sided test M_1/2 = 40.4
+pm25.test <- min(pm25.n - pm25.neg, pm25.neg)
+cat("The AQI's data 50% sign-test's p-value is", 2*pbinom(pm25.test,pm25.n,0.5))
+#do not reject H_{0}
+```
+$p = 0.8642 > \alpha = 0.1$ 所以我们不拒绝原假设$H_{0}: M_{0.5} = 40.4$，表明在90%置信水平下可以接受AQI数据的真实中位数是40.4。
+
+* 中位数检验与分位数检验的不同
+
+    * 中位数检验一般是双侧检验，并且这个检验是对称的(p=0.5),所以使用S-或S+，它们都假设服从Binomial(n',0.5)，但分位数检验一般是单侧检验，并且这个检验不是对称的,假设它们分别服从的是 $S- \sim \text{Binomial}(n',p)$,$S+ \sim \text{Binomial}(n',1 - p)$
+    * 为了**方便**检验，使用的检验量不同。
+        * 中位数检验使用$K = \min \{S-,S+\}$作为检验统计量，计算$P(K \leq k) \leq \alpha$的最大k
+        * 分位数检验则根据检验的统计量而选定较为方便计算的统计量。
+            * 右侧检验使用S-，计算$P(S- \leq k) \leq \alpha$的最大k
+            * 左侧检验使用S+,计算$P(S+ \leq k) \leq \alpha$的最大k

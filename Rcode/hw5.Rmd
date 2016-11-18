@@ -1,0 +1,236 @@
+---
+title: "10月26日非参作业"
+author: "张颖 2013202023"
+date: "November 1, 2016"
+output: html_document
+---
+
+#### $W^{+}$的精确分布函数
+
+```{r}
+dwilxonfun <- function(N) {
+    a = c(1,1)
+    n = 1
+    p = NULL
+    for (i in 2:N) {
+        t = c(rep(0,i),a)
+        a = c(a,rep(0,i)) + t
+        p = a/(2^i)
+    }
+    names(p) <- (1:length(p)) - 1
+    p
+}
+```
+
+
+#### $W^{+}$的计算函数
+
+```{r}
+
+wplus <- function(data) {
+    R.pos <- rank(abs(data))
+    W.pos <- sum((data > 0)*R.pos)
+    W.pos
+}
+```
+
+#### 随机游程的精确分布函数
+
+```{r}
+pruns <- function(n,n0)  {
+  b <- NULL
+  n1 <- n - n0
+  #set the possible num of a
+  a <- 1:(2*min(n0,n1) + 2)
+  #the prob. b
+  for (i in 1:length(a)) {
+    k = floor(a[i]/2)
+    if(a[i] %% 2 == 0)  {
+      b[i] <- 2 * choose((n1 - 1),(k - 1)) * choose((n0 - 1),(k -1))/choose(n,n1)
+    }else
+      b[i] <- (choose((n1 - 1),(k - 1)) * choose((n0 - 1),k) + choose((n0 - 1),(k - 1)) * choose((n1 - 1),k))/choose(n,n1)
+  }
+  #the cumuprob. c
+  c <- cumsum(b)
+  #result
+  result = as.data.frame(cbind(a,b,c)) 
+  colnames(result) <- c("k","prob","cumuprob")
+  return(result)
+}
+```
+
+#### 符号检验的函数
+
+```{r}
+signtest <- function(data,p = 0.5,conf.level = 0.95, alternative = NULL) {
+    s.neg <- sum(data < 0)
+    s.pos <- sum(data > 0)
+    n1 <- s.neg + s.pos
+    binom.test(s.neg,n1,p=p,conf.level = conf.level, alternative = alternative)
+}
+```
+
+
+##2.1
+###(1)符号检验中位数
+
+$H_{0}$: 顾客购买商品中位数是10件 $M_{0.5}=10$
+
+```{r}
+item <- c(22,9,4,5,1,16,15,26,47,8,31,7)
+signtest(item - 10, p = 0.5, conf.level = 0.95)
+#p-value is 1 so we cannot reject the null hypothesis that the median is 10
+```
+
+p-value = 1 所以我们不拒绝原假设，接受中位数是10的原假设。
+
+
+###(2)Wilcoxon
+
+$H_{0}:$ 顾客购买商品的数量的对称中心（中位数及平均数）是10件 $M_{0.5}=10$
+
+####自己写的Wilcoxon函数检验
+
+```{r}
+n = length(item)
+W.pos <- wplus(item - 10)
+p.wilxon <- dwilxonfun(n)
+p.wilxon
+p.value <- 2*sum(p.wilxon[(W.pos+1):length(p.wilxon)])
+p.value
+#p-value is 0.3012695 so under 95% confidence level we cannot reject the null hypothesis that the mean is 10
+```
+
+p-value = 0.3012695 > 0.05 所以在95%置信水平下我们不能拒绝原假设：顾客购买的商品数量的对称中心是10
+
+####R自带Wilcoxon检验
+```{r}
+wilcox.test(item - 10)
+#not accurate
+```
+
+p-value = 0.2892 > 0.05，和上述精确wilcoxon检验结果一致，但是由于我们的数据里面有一个长度为2的结（有两个5），此时的检验函数无法计算精确的p值。
+
+##2.2
+
+$H_{0}: 男女比例1:1$
+
+```{r}
+S.neg <- 150
+S.pos <- 200
+n <- 350
+binom.test(S.neg,n,p=0.5,conf.level = 0.95)
+#p-value is 0.00872 so under 95% confidence level we can reject the null hypothesis that the the ratio of male and female is 1:1
+```
+
+使用了符号检验，得到的p-value = 0.00872 < 0.01的，所以在95%置信水平下，我们可以拒绝原假设。我们认为男女比例并不是1:1的。
+
+##2.3
+
+$Cox-Staut$趋势检验，$H_{0}:$ 死亡率没有上升趋势。
+
+```{r}
+accident <- c(17.3,17.9,18.4,18.1,18.3,19.6,18.6,19.2,17.7,20.0,19.0,18.8,19.3,20.2,19.9)
+n <- length(accident)
+if(n%%2 == 0) {D <- accident[1:(n/2)] - accident[(n/2+1):n]
+}else D <- accident[1:((n - 1)/2)] - accident[(1+(n+1)/2):n]
+#H_{0}: there is no increasing trend
+S.pos <- sum(D>0)
+binom.test(S.pos,n,p = 0.5, alternative = "less")
+#p-value is 3.052e-05 \approx 0 hence we can reject the null hypothesis that there is no increasing trend.
+```
+
+p值是3.052e-05$\approx 0$，所以我们拒绝原假设，则认为死亡率有上升趋势。
+
+##2.4
+$H_{0}:$两次比赛三分球命中数没有差别。
+
+我们将数据转换成d = 第一个联赛命中数 - 第二个联赛命中数,原假设中 d = 0
+
+###(1)Sign-test
+
+```{r}
+three <- c(91,81,46,51,108,63,99,51,110,46,105,45,191,66,57,64,34,90,81,28)
+three <- matrix(three,ncol = 2, byrow = TRUE)
+d <- three[,1] - three[,2]
+signtest(d)
+#p-value is 0.3438 > 0.1 hence under 90% confidence level we cannot reject the null hypothesis that there is no difference betwn two league
+```
+
+p-value = 0.3438 > 0.1,所以在90%置信水平下，我们不能拒绝原假设。
+
+
+###(2)Wilcoxon
+```{r}
+n <- length(d)
+W.pos <- wplus(d)
+p.wilxon <- dwilxonfun(n)
+p.wilxon
+p.value <- 2*sum(p.wilxon[(W.pos+1):length(p.wilxon)])
+p.value
+#p-value is 0.08398 < 0.1 so under 90% confidence level we can reject the null hypothesis that there is no deifference btwn two leagues
+```
+
+p-value = 0.08398 < 0.1 所以在置信水平90%时，我们可以拒绝原假设，则我们有90%的把握认为两个联盟里三分球命中数是有差别的。
+
+```{r}
+wilcox.test(d)
+#while no ties, accurate
+```
+
+R语言自带函数结果相同（因为没有长度大于1的结）
+
+###(3)Comparison
+Wilcoxon检验的不只是中位数，还检验平均数，它的原假设是d=0是数据的对称中心，它比符号检验多检验的还有对称性。所以Wilcoxon检验对数据的要求更高，检验更容易被拒绝。在本题目里，检验的是两个联赛的三分球得分次数是否存在显著差异，我认为这差异应该同时检验中位数是否为0，并且检验对称性，更能说明差异性，所以使用Wilcoxon检验会更加合理。在检验的结果来看，我们也发现，同样在90%置信水平下，Wilcoxon检验是能够拒绝原假设的，也验证了之前的解释。
+
+
+##2.6
+
+$H_{0}:$加多加少是随机发生的。
+
+```{r}
+anti <- c(509,505,502,501,503,493,498,497,502,504,506,505,508,498,495,496,507,506,507,508,505)
+sum(anti == 500) # there is no data = 500, so they are either > 500 or < 500
+n <- length(anti)
+anti.sign <- as.numeric((anti - 500) > 0)
+n1 <- sum(anti.sign)
+result <- pruns(n,n1)
+result
+p.value <- 2*result[5,3]
+p.value
+#p-value is 0.02786378 < 0.05 so under 95% confidence level we can reject the null hypothesis that this is not random.
+```
+
+使用了随机游程的检验，我们发现p-value = 0.02786378 < 0.05，所以在95%置信水平下我们拒绝原假设，认为加多加少这个事件的发生不是随机的。
+
+##2.7
+
+$H_{0}:d = \text{减肥前体重} - \text{减肥后体重} \leq 0$减肥计划失败。
+使用符号检验与Wilcoxon检验
+
+###符号检验
+
+```{r}
+weight <- c(174,165,192,186,188,183,182,178,201,203,188,181)
+weight <- matrix(weight, nrow = 2)
+d <- weight[1,] - weight[2,]
+#Suppose they all failed. H_{0}: Md <= 0 (P{failed} >= 0.5)
+signtest(d,alternative = "less")
+```
+
+p-value = 0.1094 >0.05,所以在95%置信水平下并不能拒绝原假设。
+
+###wilconxon
+
+```{r}
+n <- length(d)
+W.pos <- wplus(d)
+p.wilxon <- dwilxonfun(n)
+p.wilxon
+p.value <- sum(p.wilxon[(W.pos+1):length(p.wilxon)])
+p.value
+#p-value is 0.03125 < 0.1 so under 90% confidence level we can reject the null hypothesis that there is no deifference btwn two leagues
+wilcox.test(d, alternative = "great")
+```
+
+p-value = 0.03125 <0.05，所以在95%置信水平下是能够拒绝原假设的，所以我们认为减肥计划是成功的。

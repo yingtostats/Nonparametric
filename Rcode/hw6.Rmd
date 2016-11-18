@@ -1,0 +1,304 @@
+---
+title: "非参第六次作业"
+author: "张颖 2013202023"
+date: "November 7, 2016"
+output:
+  html_document: default
+  word_document: default
+---
+
+
+
+```{r,echo=FALSE}
+setwd("C:\\Users\\user\\Desktop\\Non-parametric\\hw6")
+```
+
+##2.8
+
+  * n of n Bootstrap
+  * 写的pboot函数能求出percentile = p分位数的95%(default)的置信区间
+  
+```{r}
+nerve <- scan("nerve.txt")
+pboot <- function(p,alpha = 0.05,data = nerve,B = 1000,n = length(data)) {
+  quantile.p <- vector()
+  for (i in 1:B) {
+    sample <- sample(data,n,replace = TRUE) #bootstrap size = n from nerve data
+    quantile.p[i] <- quantile(sample,p) #quantile of each bootstrap sample 
+  }
+  lower <- quantile(quantile.p,alpha/2) #lower bound
+  upper <- quantile(quantile.p,1-alpha/2) #upper bound
+  return(c(lower,upper))
+}
+
+pboot(p = 0.75,alpha = 0.05,data = nerve,B=1000) #75% percentile's 95% confidence interval
+pboot(p = 0.25,alpha = 0.05,data = nerve,B=1000) #25% percentile's 95% confidence interval
+```
+
+
+
+##2.9
+
+  * n of n bootstrap
+  * 写的corrboot函数能够输出Y与Z的相关系数estimate，bootstrap估计的标准差sd.est，bootstrap估计的95%置信区间(lower,upper)
+  * 函数里输出的95%置信区间使用的是非参的方法bootstrap sample's 2.5%percentile,97.5%percentile.
+
+```{r,echo = FALSE}
+data <- matrix(c(576,635,558,578,666,580,555,661,651,
+                 605,653,575,545,572,594,3.39,3.30,2.81,3.03,
+                 3.44,3.07,3.00,3.43,3.36,3.13,3.12,2.74,
+                 2.76,2.88,3.96),ncol = 2,byrow = FALSE)
+```
+
+```{r}
+set.seed(1247)
+corrboot <- function(data,B,alpha = 0.05,b = length(data)) {
+  corr.est <- cor(data[,1],data[,2])
+  corr <- vector()
+  n <- length(data[,1])
+  for (i in 1:B) {
+    sample <- sample(1:n,b,replace = TRUE) #bootstrap sample's index
+    corr[i] <- cor(data[sample,1],data[sample,2])  #correlation of each bootstrap sample
+  }
+  sd.est <- sd(corr) #standard deviation
+  lower <- quantile(corr,alpha/2) #lower bound
+  upper <- quantile(corr,1-alpha/2) #upper bound
+  para <- c(2*corr.est - upper,2*corr.est - lower,corr.est,sd.est) 
+  names(para) <- c("lower","upper","estimate","sd.est")
+  return(para)
+}
+
+corrboot <- corrboot(data,B=1000)
+corrboot
+```
+
+###(1)
+
+$$\hat{\theta} = Corr(Y,Z) = 0.546$$
+
+###(2)
+
+$$se(Corr^{*}_{Bootstrap}) = 0.1384$$
+
+###(3)
+
+95% Confidence Interval for the Correlation (Bootstrap Pivotal)
+
+$$(2\hat{\theta} - \theta^{*}_{boot.upper} \quad,\quad 2\hat{\theta} - \theta^{*}_{boot.lower})$$
+```{r,echo=FALSE}
+cat("(",corrboot[3]*2-corrboot[2],",",corrboot[3]*2-corrboot[1],")")
+```
+
+
+
+##2.11
+###(1)
+
+
+  * $\bar{X} \sim N(\mu,\frac{1}{n})$ Hence $\hat{\theta} = e^{\bar{X}} \sim \text{lnN}(\mu,\frac{1}{n})$ 所以可以知道
+  $$var(\hat{\theta}) = (e^{\frac{1}{n}} - 1)e^{2\mu + \frac{1}{n}}$$
+  $$\hat{var}(\hat{\theta}) = (e^{\frac{1}{n}} - 1)e^{2\bar{X} + \frac{1}{n}}$$
+
+####枢轴量法 
+
+  * $\mu$'s 95% 置信区间是 $(\bar{X} - z_{\alpha/2}\frac{1}{\sqrt{n}}, \bar{X} + z_{\alpha/2}\frac{1}{\sqrt{n}})$
+
+  * $\theta = e^{\mu}$'s 95% 置信区间近似可以写成 $(e^{\mu\text{'s lower}},e^{\mu\text{'s upper}} )$ (但是这样不够准确)
+
+```{r}
+n <- 100
+mu <- 5
+set.seed(1247)
+data <- rnorm(n,mu,1) # data X_i
+
+mean.x <- mean(data) # X.bar
+sd.x <- sd(data) #sd(X_i)
+sd.theta <- sqrt((exp(1/n) - 1)*exp(2*mean.x + 1/n)) #se 
+
+#mu's confidence interval
+ci.x <- c(mean.x + qnorm(0.025,0,1)*sd.x/sqrt(n),mean.x - qnorm(0.025,0,1)*sd.x/sqrt(n)) 
+
+ci.theta <- exp(ci.x) #approximate theta's ci
+
+para.all <- c(ci.theta,sd.theta)
+names(para.all) <- c("lower","upper","sd.est") 
+
+para.all
+```
+
+  * 95%置信区间(122.07912,173.47262) 标准差为14.662
+  
+####参数Bootstrap法
+
+  * n of n bootstrap
+  * 每次算出 $\theta^{*}_{boot} = e^{\bar{X}^{*}}$
+  * 求得sd($\theta^{*}_{boot}$)
+  * 95%置信区间($\hat{\theta} - z_{\alpha/2}sd,\hat{\theta} + z_{\alpha/2}sd$)
+
+```{r}
+lgnboot <- function(data,B,alpha = 0.05) {
+    mean.x <- mean(data)
+    theta <- exp(mean.x)
+    theta.boot <- vector()
+    n <- length(data)
+    
+    for (i in 1:B) {
+        sample <- sample(1:n,n,replace = TRUE) #bootstrap 
+        theta.boot[i] <- exp(mean(data[sample]))  
+    }
+    
+    sd.boot <- sd(theta.boot) #bootstrap's standard deviation
+    ci.theta <- c(theta + qnorm(0.025,0,1)*sd.boot,theta - qnorm(0.025,0,1)*sd.boot) #confidence interval
+    para <- c(ci.theta,sd.boot)
+    names(para) <- c("lower","upper","sd.boot")
+    return(list(para,theta.boot))
+}
+
+lgn.boot <- lgnboot(data,1000)
+lgn.boot[[1]]
+```
+
+
+
+####非参数Bootstrap方法
+
+  * n of n bootstrap
+  * 每次算出 $\theta^{*}_{boot} = e^{\bar{X}^{*}}$
+  * 求得sd($\theta^{*}_{boot}$)
+  * 95%置信区间$(\theta^{*}_{2.5\%},\theta^{*}_{97.5\%})$
+
+```{r}
+npboot <- function(data,B,alpha = 0.05) {
+    theta.boot <- vector()
+    n <- length(data)
+    
+    for (i in 1:B) {
+      sample <- sample(1:n,n,replace = TRUE) #bootstrap
+      theta.boot[i] <- exp(mean(data[sample]))
+    }
+    
+    sd.boot <- sd(theta.boot) #sd
+    ci.theta <- c(quantile(theta.boot,0.025),quantile(theta.boot,0.975)) #confidence interval
+   
+     para <- c(ci.theta,sd.boot)
+    names(para) <- c("lower","upper","sd.boot")
+    
+    return(list(para,theta.boot))
+}
+
+np.boot <- npboot(data,1000)
+np.boot[[1]]
+```
+
+####参数与非参数Bootstrap对比
+
+
+```{r}
+comb <- rbind(para.all,lgn.boot[[1]],np.boot[[1]])
+rownames(comb) <- c("pivot.est","para.boot","nonp.boot")
+comb
+```
+
+
+  * 参数法在这里是不准确的,$\theta^{*}_{boot}$服从的是对数正态分布，是偏态分布，以估计值为中心，置信区间不是对称的，所以如果用参数法则假定了正态分布的95%置信区间的话，置信区间变成了对称的估计。
+  * 参数Bootstrap法里方差和非参数里的方差计算方式是一样的，得出来结果不同只是因为重抽样里的误差。
+  * 由于参数Bootstrap法假定正态分布，估计出来的置信区间会有偏差。
+  * 非参数Bootstrap方法与枢轴量法得出来的结果近似，比较可靠。
+
+###(2)
+
+  * 参数Bootstrap与非参数Bootstrap得到的$\theta^{*}_{boot}$的方法是一模一样的。所以直方图也很类似。
+  * 理论上$\hat{\theta} \sim lnN(5,0.01)$，直方图也能看出，Bootstrap样本略微右偏。
+
+```{r,fig.height=3.5}
+par(mfrow = c(1,2))
+hist(lgn.boot[[2]],breaks = 18,xlab = "theta",main = "Parametric Bootstrap")
+hist(np.boot[[2]],xlab = "theta",breaks = 18, main = "Non-Parametric Bootstrap")
+```
+
+##example 2.15
+
+程序参照课本
+
+```{r}
+scot <- scan("scot.txt")
+walsh <- NULL
+n <- length(scot)
+for (i in 1:n)  {
+  for (j in i:n)  {
+    walsh <- c(walsh,(scot[i]+scot[j])/2)
+  }
+  walsh <- sort(walsh) #walsh statistcs after sorting
+}
+
+walsh.sym <- function(walsh = walsh, alpha= 0.05) {
+  N <- length(walsh)
+  for (i in 1:N/2)  {
+    F = pbinom(N-i,N,0.5) - pbinom(i,N,0.5)
+    if (F < 1 - alpha) {
+      I <- i-1
+      break
+    }
+  }
+  ci <- c(walsh[I],walsh[N-I+1])
+  names(ci) <- c("lower","upper")
+  return(ci)
+}
+
+walsh.sym(walsh，0.05)
+```
+
+
+##example 2.17
+
+  * 课本上给出了随着Bootstrap次数B的增加对估计量的影响，最终选取了B = 1000
+  * 但并没有给出每次Bootstrap的样本大小m的选取方法(m of n bootstrap)。
+  * (Efron,1979)最开始提出的是n of n Bootstrap，就是m = n
+  * (Bickel et al., 1997)提出Bootstrap方法也可以使用m < n的样本大小
+  * 对于使用Bootstrap方法对枢轴量方差的估计，m的大小会很大影响Bootstrap估计(下图是m与置信区间长度的关系)
+
+```{r,cache = TRUE}
+howtoselectn <- function(i) {
+  ci <- pboot(p = 0.50,alpha = 0.05,data = nerve,n = i, B=1000) #reuse exercise 2.8's pboot function
+  return((ci[2] - ci[1])[[1]])
+}  
+
+par(mfrow = c(1,1))
+
+plot((1:100)*10,sapply((1:100)*10,howtoselectn)，xlab = "m (size of bootstrap sample)",ylab = "length of ci",main = "m and length of confidence interval")
+```
+
+  * 所以我选择了m = 550来作为每次Bootstrap抽的样本大小（更稳定）。
+
+  * pboot.normal是参数法的Bootstrap，利用Bootstrap估计枢轴量方差，然后代入正态分布95%置信区间，得到pboot.normal
+  
+```{r}
+
+pboot.normal <- function(p,alpha,data,B,n = length(data)) {
+    quantile.p <- vector()
+    
+    for (i in 1:B) {
+      sample <- sample(nerve,n,replace = TRUE)
+      quantile.p[i] <- quantile(sample,p)  
+    }
+    
+    sd.m <- sd(quantile.p)
+    ci <- c(quantile(nerve,p)+qnorm(0.025,0,1)*sd.m,quantile(nerve,p)-qnorm(0.025,0,1)*sd.m)
+    names(ci) <- c("2.5%","97.5%")
+    return(ci)
+}
+
+pboot.normal <- pboot.normal(p = 0.50,alpha = 0.05,data = nerve,n = 550, B=1000)
+```
+
+  * pboot是课后习题2.8里写过的函数，利用Bootstrap非参数的方法求95%置信区间,得到pboot.result。
+  
+  * pboot.pivotal是用Bootstrap枢轴量法来求的95%置信区间。
+  
+```{r}
+pboot.result <- pboot(p = 0.50,alpha = 0.05,data = nerve,n = 550,B=1000)
+pboot.pivotal <- sort(2*median(nerve) - pboot.result)
+names(pboot.pivotal) <- c("2.5%","97.5%")
+
+t(cbind(pboot.normal,pboot.pivotal,pboot.result))
+```
