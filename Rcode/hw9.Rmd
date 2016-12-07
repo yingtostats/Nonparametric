@@ -1,0 +1,289 @@
+---
+title: "11月22日非参作业"
+author: Ying Zhang
+output:
+  html_document: default
+  html_notebook: default
+---
+
+```{r,echo=FALSE}
+library("car")
+```
+
+#Bonferroni
+
+##(1) 方差分析中F检验的条件
+
+* 各组总体都分别服从正态分布
+* 各组总体的方差相等
+* 每个观测值都是独立的
+
+###a. 检验各组正态性
+
+* 使用shaprio-wilk检验来检验5组数据的正态性,原假设是该组总体服从正态分布。
+* 置信水平设为$\alpha = 0.05$
+
+```{r}
+dat.y <-c(64.26,42.84,42.48,48.19,80.22,69.61,48.19,48.90,52.01,67.33,60.40,78.91,74.68,84.68,81.14,94.82,64.44,69.63,69.73,74.97,80.44,80.44,94.20,96.39,74.97,88.06,93.47,94.10,100.67,101.14,113.42,118.98,77.11,82.48,83.43,89.01,97.48,103.81,107.10,178.42)
+dat.x <- as.factor(rep(c("A","B","C","D","E"),each = 8))
+dat.matrix <- matrix(dat.y,ncol = 5)
+apply(dat.matrix,2,shapiro.test) #III not normal
+```
+
+我们看到前4组都通过了正态性检验(p-value > 0.05),但是最后一组III期矽肺的检验结果p-value = 0.004 < 0.05，所以我们拒绝了原假设，从而我们有95%的把握说最后一组III期矽肺的总体分布是不服从正态分布的。而这检验的结果也说明该例数据实际上并没有达到F检验的条件。
+
+###b. 检验同方差性
+
+* 可以使用Bartlett's Test来检验各组总体是否同方差这一条件
+* 可是Bartlett's Test的假定是各组总体都分别服从正态分布，刚刚的正态性检验我们也发现了，最后一组III期矽肺的检验结果是不服从正态分布的（95%置信水平），当正态性假定不成立时，Bartlett's Test的检验结果会大大受到影响。
+
+```{r}
+bartlett.test(dat.y,dat.x）
+```
+
+在包含第五组的Bartlett's检验的结果表明p-value = 0.02419<0.05，Bartlett's Test结果在95%置信水平下拒绝了原假设：5组样本的同方差性。
+
+```{r}
+bartlett.test(dat.y[-(33:40)],dat.x[-(33:40)])
+```
+
+在去掉了第五组数据的Bartlett's Test结果p-value=0.9577,可以认为如果只有这四组通过正态性检验的数据的话，这四组数据是满足同方差性的假设的。由此可见正态性假设在Bartlett's Test中的重要性。因此Bartlett's Test在此不适用。
+
+* Levene's Test来检验同方差性，该检验不需要使用到正态性分布这一假定,在这个例子中使用会更科学一点。
+* Levene's Test检验原假设为：各组总体具有相同的方差。
+
+```{r}
+leveneTest(dat.y~dat.x)
+```
+
+检验的结果表明p-value = 0.614 > 0.05，因此在95%置信水平下可以认为各组的方差是相等的。
+
+###c. 总结
+
+方差分析中F检验的条件，从正态性和同方差性这两个条件来看，我们通过Shapiro-Wilk Test检验认为在95%置信水平下，第五组III期矽肺的总体分布是不服从正态分布的。这五组实验数据在未全都满足正态性分布的假定下，使用不要求正态性假设的Levene's Test检验结果表明是这五组实验数据是符合同方差性这一条件的。
+
+###d. Kruskal-Wallis检验
+
+* Kruskal-Wallis test是W-M-W检验的推广，使用的是秩的检验，它要求
+    - 数据的分布是连续的
+    - 各组分布是相似的（位置参数可以不同）
+* Kruskal-Wallis test原假设是5个组的总体位置都相同
+
+```{r}
+plot(0,0,type = "l",xlim = c(23,200),ylim = c(0,0.032))
+line <- sapply(apply(dat.matrix,2,density),lines)
+```
+
+从图上来看，各组分布的看起来大体相似，符合Kruskal-Wallis test的假设。
+
+```{r}
+kruskal.test(dat.y~dat.x)
+```
+
+Kruskal-Wallis test的结果是p-value = 0.0001222<0.05,所以在95%置信水平下我们得到和F检验相同的结果：拒绝原假设。我们有95%的把握认为5个组的总体位置是不全相同的。
+
+##(2) 两两独立样本的检验
+
+###a. Tukey's test
+
+* 使用Tukey检验修正了两两对比使用的置信水平$\alpha$
+* Tukey's test得到的置信水平会刚刚好$\alpha=0.05$
+* Tukey's test使用的检验量是$t = \frac{\mu_{1} - \mu_{2}}{SE}$，其中$\mu_1 > \mu_2$并且$SE$为全部样本的标准差。该统计量对应的分布是student range distribution.
+* Tukey's test假定的要求是
+    - 在各个组每个观测值独立分布的（从实验设定看满足此条件）
+    - 被检验的两个组的总体是服从正态分布的（第五个组III期矽肺不符合条件）
+    - 被检验的两个组是同方差的（在第一小问内已经验证了）
+* Tukey's test是检验了**每一对**是否相等，所以总有共10次两两比较。
+* 在每组实验次数都相等的时候效果较好
+
+```{r}
+a1 <- aov(dat.y~dat.x)
+TukeyHSD(a1)
+```
+
+Tukey检验的结果表明，在95%置信水平下，III期矽肺与正常人的血清粘蛋白的含量差异显著（p-value = 0.0001633), II期矽肺与正常人的血清粘蛋白的含量差异显著（p-value = 0.0006187), III期矽肺与0期矽肺的血清粘蛋白的含量差异显著（p-value = 0.0385143)，其余差异不显著。
+
+###b. Bonferroni Method
+
+* 使用Bonferroni Method两两对比，将两两对比使用的置信水平修正为$\alpha_0 = \frac{\alpha}{m}=0.05/4=0.0125$
+* 没有更多的假设，能够广泛使用在各个地方，原假设是两组均值相同。
+* 但是修正后整体假设检验的置信水平会$\leq \alpha$
+* 可以只比较控制组vs实验组
+
+```{r}
+t.pair <- function(dat1,dat2) {
+  t.test(dat1,dat2)$p.value
+}
+p.bon <- NULL
+for (i in 1:4) {
+  p.bon <- c(p.bon,t.pair(dat.y[1:8],dat.y[(8*i+1):(8*(i+1))]))
+}
+pbon <- data.frame(c("A-0","A-I","A-II","A-III"),p.bon)
+colnames(pbon) <- c("Pair","P-value")
+pbon
+```
+
+从P值来看，在95%置信水平上，0期矽肺与正常人的血清粘蛋白的含量差异不显著，I,II,III期矽肺与正常人的血清粘蛋白的含量差异显著。
+
+###c. Holm–Bonferroni method
+
+* Bonferroni方法的改进
+* 计算每个两两比较后得到的p值，然后对p值进行排序
+* 在给定置信水平$\alpha$下取最小的满足$p > \frac{\alpha}{m+1-k} = 0.05/(4+1-k) = 0.05/(5-k)$的p值$p_0$
+* 把比$p_0$更小的p值的假设检验都拒绝，然后接受大于等于$p_0$的检验
+* 修正后整体假设检验的置信水平会$\leq \alpha$
+* 可以只比较控制组vs实验组
+
+```{r}
+p.sort <- sort(p.bon)
+R <- NULL
+for (i in 1:4) {
+    if (p.sort[i] > 0.05/(5-i)) {
+      R = i;break;
+    }
+}
+R
+```
+
+所以没有一个p值满足这个条件，所以我们拒绝全部比较原假设，在95%置信水平下0-III期矽肺与正常人的血清粘蛋白的含量差异显著。
+
+###d. Dunnett's Test
+
+* 使用秩来进行两两比较
+* 没有对分布有要求
+* 可以只比较控制组vs实验组
+* $\alpha_* = \alpha/k(k-1) = 0.05/(5*4) = 0.05/20 = 0.0025$
+
+```{r}
+dat.rank <- matrix(rank(dat.y),ncol = 5)
+mean.rank <- colMeans(dat.rank)
+n <- length(dat.y)
+n1 <- 8
+
+Dunn.test <- function(R1,R2,n1,n2,n) {
+  d <- abs(R1-R2)/(sqrt((n*(n+1)/12)*(1/n1+1/n2)))
+  return(1-pnorm(d))
+}
+
+p.dunn <- NULL
+for (i in 1:4) {
+    p.dunn <- c(p.dunn,Dunn.test(mean.rank[1],mean.rank[i+1],n1,n1,n))
+}
+
+pdunn <- data.frame(c("A-0","A-I","A-II","A-III"),p.dunn)
+colnames(pdunn) <- c("Pair","P-value")
+pdunn
+
+```
+我们可以看到，将计算出的p值与调整过的置信度$\alpha_* = 0.0025$比，在95%置信水平下II,III期矽肺与正常人的血清粘蛋白的含量差异显著,0,I期矽肺与正常人的血清粘蛋白的含量差异不显著。
+
+##(3)比较与分析
+
+* Tukey's test对于正态分布，平衡设计的实验比较好的两两比较的方法，因为它可以控制犯第一类错误的概率正好为$\alpha$。
+    - 但是它对正态性要求比较严格，这个假设不成立的话结果就会受到很大影响
+    - 它会比较所有成对的组，在一些情况下，会造成不必要的多余计算，比如在这个例子里，我们关注的是正常人和其他人的比较，控制组和别的实验组的比较，实验与实验组的比较我们这里并没有要求。
+    - 对于不平衡的实验数据组效果不好。
+* Bonferroni Method简单易懂，在很多种两两比较的检验下都可以使用，不限制特定分布，使用广泛。并且我们可以选择只比较控制组和实验组，不需要所有组对都比较，在只需要比较实验与对照组的情况下，比Tukey检验计算次数会大大减少。
+    - 在比较次数很多的情况下，对于每个比较的显著性水平要求太高了，比如要对比10次的话，95%置信水平下修正的置信度为$\alpha_* = 0.005$，很难有检验能达到显著，犯第二类错误概率增大，这个时候不适合使用Bonferroni方法。
+* Holm–Bonferroni method作为一种修正后的Bonferroni方法，改进了原本在对比次数增加后Bonferroni检验难以达到显著的缺点，适用于对比次数很多的情况下。
+    - 在这个例子里，这个方法非常敏感，认为0-III期矽肺与正常人比都显著，是四种方法里最敏感的。
+* Dunnett's Test对分布没有要求，，可以只比较控制组与实验组。
+    - 在检验结果里，Dunn's test检验结果与Tukey相同，都只检验除了II与III期的显著。
+* ![Picture](Workflow.png)
+
+#习题3.3
+
+##(1)
+
+$H_0:\mu_{1} = \mu_{0}$受过训练对给潜在顾客留下好的印象没有影响
+
+$H_1:\mu_{1} \geq \mu_{0}$受过训练会给潜在顾客会留下更好印象
+
+```{r}
+x<-c(18,15,9,10,14,16,11,13,19,20,6)
+y<-c(12,13,9,8,1,2,7,5,3,2,4)
+```
+
+##(2)
+```{r}
+plot(density(y),type="l",xlim = c(-6,27),main="With and Without training",col = "purple")
+lines(density(x),type="l",col = "red")  
+legend(x=20,y = 0.08,c("With","W/O"),col = c("purple","red"),lty = 1)
+```
+
+##(3)
+
+* 两个分布除了位置，从图像上看并不相同，经过培训后得到的数据的分布会更窄些，并且不对称，所以不使用Brown-Mood中位数检验。
+* Wilcoxon-Mann-Whitney秩和检验只要求两个分布形状相似，不假定对称，所以在这个例子上用作检验效果会更佳。
+
+##(4)
+
+```{r}
+wilcox.test(x,y,alternative = "greater")
+```
+
+##(5)
+p-value = 0.0008036接近于0了，所以我们有足够的证据可以拒绝原假设，认为受到培训后的员工会给潜在顾客会留下更好印象。
+
+#习题4.1
+```{r}
+a<-c(83,64,67,62,70)
+b<-c(85,81,80,78)
+c<-c(88,89,79,90,95)
+shapiro.test(a)
+shapiro.test(b)
+shapiro.test(c)
+```
+
+在95%置信水平下，它们都通过了正态性检验。
+
+```{r}
+dat<-c(a,b,c)
+n <- length(dat)
+comp<- rep(c("A","B","C"),each = 5)[-6]
+comp
+bartlett.test(dat,comp)
+```
+
+在95%置信水平下，它们都通过了齐方差性检验。
+
+进行方差分析F检验，原假设认为三品牌灯泡寿命相同。
+
+```{r}
+anova(lm(dat~comp))
+```
+
+结果表明，F = 11.586，p-value = 0.001961 < 0.05, 所以我们拒绝原假设，在95%置信水平下认为三品牌寿命是不相同的。
+
+下面进行Tukey's test进行两两比较
+
+```{r}
+TukeyHSD(aov(dat~comp))
+```
+
+我们把得到的修正后的p值与0.05进行比较，在95%置信水平下，我们认为B-A公司(p-value = 0.04256 < 0.05)，A-C公司(p-value = 0.0015317 < 0.05)的灯泡寿命有显著的差别，而认为B-C公司并没有显著差别。
+
+#习题4.2
+
+```{r}
+
+Dunn.test <- function(R1,R2,n1,n2,n) {
+  d <- abs(R1-R2)/(sqrt((n*(n+1)/12)*(1/n1+1/n2)))
+  return(1-pnorm(d))
+}
+
+n<-16
+rk <-c(9.1,12.17,3.5)
+n1 <- 5
+n2 <- 6
+n3 <- 5
+p.dunn <- NULL
+p.dunn <- c(p.dunn,Dunn.test(rk[1],rk[2],n1,n2,n))
+p.dunn <- c(p.dunn,Dunn.test(rk[1],rk[3],n1,n3,n))
+p.dunn <- c(p.dunn,Dunn.test(rk[2],rk[3],n2,n3,n))
+pdunn <- data.frame(c("A-B","A-C","B-C"),p.dunn)
+colnames(pdunn) <- c("Pair","P-value")
+pdunn
+```
+
+若以95%置信水平来看，我们认为A-C，B-C产地的产量有显著差异(p=0.031与p=0.0013175，都小于0.05),A-B产地之间产量没有显著差异。
